@@ -1,0 +1,509 @@
+---
+title: "Projekt R - Markdown"
+author: "Borna Odobašić, Istok Korkut, Lovro Matić"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(Matrix)
+```
+
+```{r include-script}
+source("flory.R")
+source("renyi.R")
+source("2d.R")
+```
+
+Ovo je R Markdown dokument koji će redom kako je navedeno u radu prikazivati potrebne funkcije, vizualizacije i komentare. Detaljniji opis naveden je u LaTeX dokumentu rada.
+
+**Floryjev model**
+
+```{r}
+limitFlory <- (1 - exp(-2)) / 2
+```
+
+Matematičkim izračunom dobiveno je očekivano zauzeće, tj. udio automobila koji bi na kraju zauzeo sva parkirna mjesta, a on iznosi približno 0.432.
+
+```{r}
+set.seed(12)
+
+flory(10, 2)
+
+result <- repFlory(10, 2, 100)
+mean(result) / 10
+```
+Na veličini parkinga 10, teško je dobiti precizan rezultat kao što je Floryjev limit, ali kada se više puta pokrene simulacija, u prosjeku dobijemo rezultat nešto bliži Floryjevom limitu, ali za preciznije rezultate, povećat ćemo veličinu parkinga.
+
+```{r}
+set.seed(12)
+
+result10 <- repFlory(10, 2, 1000)
+result50 <- repFlory(50, 2, 1000)
+result1000 <- repFlory(1000, 2, 1000)
+
+df10 <- as.data.frame(result10)
+df50 <- as.data.frame(result50)
+df1000 <- as.data.frame(result1000)
+
+ggplot(df10, aes(x = result10)) +
+  geom_bar(fill = "darkgoldenrod", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Flory: Broj automobila i relativna frekvencija - veličina 10"
+    ) +
+  geom_vline(xintercept = limitFlory * 10, color = "red")
+
+ggplot(df50, aes(x = result50)) +
+  geom_bar(fill = "darkgoldenrod", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Flory: Broj automobila i relativna frekvencija - veličina 50"
+    ) +
+  geom_vline(xintercept = limitFlory * 50, color = "red")
+
+ggplot(df1000, aes(x = result1000)) +
+  geom_bar(fill = "darkgoldenrod", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Flory: Broj automobila i relativna frekvencija - veličina 1000"
+    ) +
+  geom_vline(xintercept = limitFlory * 1000, color = "red")
+```
+Histogramima na slici gore, prikazano je testiranje 1000 puta na veličinama parkinga od 10, 50 i 1000. Crvenom vertikalnom linijom prikazano je očekivanje s obzirom na Floryjev limit. Kada je riječ o veličini 1000, tu imamo nešto raznovrsnije podatke jer je puno lakše doći do drugačijih rezultata, npr. u prvom primjeru vidimo da se gotovo isključivo pojavljuju brojevi 4 ili 5.\
+Kada je riječ o parkingu veličine 1000, već vidimo i zvonolik oblik distribucije broja auta oko očekivanog broja auta.\
+
+Na temelju ovih histograma, očigledno je da se povećanjem parkinga povećava i sama preciznost prema Floryjevom limitu. Zato ćemo idućim kodom prikazati prosjeke zauzeća s obzirom na povećanje parkinga.
+
+```{r}
+set.seed(12)
+
+dfinc <- data.frame(x = numeric(0), y = numeric(0))
+
+for(i in 10:200) {
+  dfinc <- rbind(dfinc, data.frame(x = i, y = mean(repFlory(i, 2, 20)) / i))
+}
+
+ggplot(dfinc, aes(x = x, y = y)) +
+  geom_line(color = "chartreuse", size = 1.7) +
+  stat_smooth(method = "loess", formula = y~x, alpha = 0.5) +
+  scale_x_continuous(name = "Veličina parkinga") +
+  scale_y_continuous(name = "Prosječno zauzeće parkinga") +
+  labs(title = "Flory: Prosječno zauzeće parkinga ovisno o veličini") +
+  geom_hline(
+    yintercept = limitFlory, color = "red", linetype = "dashed", size = 1.3
+    )
+```
+Na temelju ovog grafa, vidimo kako su na manjim veličinama parkinga veće oscilacije, no to se smanjuje kako se veličina povećava i istodobno približava idealnom limitu. Uz to, dodali smo i "loess" metodu za zaglađivanje krivulje koja lokalno procjenjuje zaglađivanje regresije te već za parking veći od 70 se iznimno približava traženom limitu.
+
+**Renyijev model**
+
+Renyijev model kontinuirano je poopćenje Floryjevog modela i u njemu računamo postotno zauzeće parkinga nakon kojeg se više ne može uparkirati nijedan automobil.\
+Ponovno je izračunima dobivena vrijednost Renyijevog limita.
+
+```{r}
+limitRenyi <- 0.7475979203
+```
+
+Pri analizi i simulacijama postupit ćemo na sličan način kao što je to bilo u Floryjevom modelu.
+
+```{r}
+set.seed(12)
+
+renyi(10, 1)
+
+result <- repRenyi(10, 1, 100)
+mean(result) / 10
+```
+Slično kao u Floryjevom modelu, rezultati pri manjoj veličini parkinga mogu biti prilično raspršeni kao što možemo vidjeti u primjeru gore. Zato ćemo ponovno pokazati histograme za različite veličine parkinga.
+
+```{r}
+set.seed(12)
+
+rresult10 <- repRenyi(10, 1, 1000)
+rresult50 <- repRenyi(50, 1, 1000)
+rresult1000 <- repRenyi(1000, 1, 1000)
+
+rdf10 <- as.data.frame(rresult10)
+rdf50 <- as.data.frame(rresult50)
+rdf1000 <- as.data.frame(rresult1000)
+
+ggplot(rdf10, aes(x = rresult10)) +
+  geom_bar(fill = "midnightblue", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Renyi: Broj automobila i relativna frekvencija - veličina 10"
+    ) +
+  geom_vline(xintercept = limitRenyi * 10, color = "red", size = 1.2)
+
+ggplot(rdf50, aes(x = rresult50)) +
+  geom_bar(fill = "midnightblue", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Renyi: Broj automobila i relativna frekvencija - veličina 50"
+    ) +
+  geom_vline(xintercept = limitRenyi * 50, color = "red", size = 1.2)
+
+ggplot(rdf1000, aes(x = rresult1000)) +
+  geom_bar(fill = "midnightblue", 
+           aes(y = after_stat(count) / sum(after_stat(count)))) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Renyi: Broj automobila i relativna frekvencija - veličina 1000"
+    ) +
+  geom_vline(xintercept = limitRenyi * 1000, color = "red", size = 1.2)
+```
+
+Histogramima smo ponovno prikazali simulacije za veličine 10, 50 i 1000. Za svaku veličinu provedeno je 1000 simulacija i ispisane su relativne frekvencije. Kako je riječ o kontinuiranom modelu, manje je *grub* od diskretnog i zato već i za veličinu 50 vidimo distribuciju koja se ravna po normalnoj oko očekivanog broja automobila.\
+
+Kako je Mannion otkrio vrijednost konstante v koja je potrebna za izračun varijance, sad ćemo za rezultate koje smo dobili primijeniti ta znanja i normirati ih. To će nam omogućiti da prikažemo koliko dobro se ravnaju po normalnoj jediničnoj razdiobi i također generiranje Q-Q plotova, koji će nam otkriti normalnost samih podataka.
+
+```{r}
+v <- 0.038156
+v10 <- v + v * 10
+v50 <- v + v * 50
+v1000 <- v + v * 1000
+
+renyiNorm10 <- (rdf10$rresult10 - limitRenyi * 10) / sqrt(v10)
+renyiNorm50 <- (rdf50$rresult50 - limitRenyi * 50) / sqrt(v50)
+renyiNorm1000 <- (rdf1000$rresult1000 - limitRenyi * 1000) / sqrt(v1000)
+
+renyiNorm10 <- as.data.frame(renyiNorm10)
+renyiNorm50 <- as.data.frame(renyiNorm50)
+renyiNorm1000 <- as.data.frame(renyiNorm1000)
+
+ggplot(renyiNorm10, aes(sample=renyiNorm10)) +
+ geom_qq(colour="orangered") +
+ geom_qq_line(colour="black") +
+ scale_y_continuous(name="Uzorak") +
+ scale_x_continuous(name="Teorijski kvantili") +
+ labs(title="Q-Q plot za parking duljine 10")
+
+ggplot(renyiNorm50, aes(sample=renyiNorm50)) +
+ geom_qq(colour="orangered") +
+ geom_qq_line(colour="black") +
+ scale_y_continuous(name="Uzorak") +
+ scale_x_continuous(name="Teorijski kvantili") +
+ labs(title="Q-Q plot za parking duljine 50")
+
+ggplot(renyiNorm1000, aes(sample=renyiNorm1000)) +
+ geom_qq(colour="orangered") +
+ geom_qq_line(colour="black") +
+ scale_y_continuous(name="Uzorak") +
+ scale_x_continuous(name="Teorijski kvantili") +
+ labs(title="Q-Q plot za parking duljine 1000")
+```
+
+Q-Q plotovi više-manje pokazuju kako se svi rezultati donekle ravnaju prema normalnoj razdiobi, ali naravno povećanjem veličine parkinga moguće je dobiti preciznije rezultate i samim tim upravo taj graf gotovo savršeno odgovara normalnoj razdiobi.
+
+
+```{r}
+ggplot(renyiNorm10, aes(x = renyiNorm10)) + 
+  geom_density(fill = "orange", alpha = 0.5) +
+  stat_function(
+    fun = dnorm, 
+    args = list(mean = 0, sd = 1), 
+    color = "navy",
+    size = 1.2) +
+  labs(
+    title = "Gustoća normaliziranih podataka Renyijeve simulacije - 10",
+    x = "Vrijednosti",
+    y = "Gustoća"
+    )
+
+ggplot(renyiNorm50, aes(x = renyiNorm50)) + 
+  geom_density(fill = "orange", alpha = 0.5) +
+  stat_function(
+    fun = dnorm, 
+    args = list(mean = 0, sd = 1), 
+    color = "navy",
+    size = 1.2) +
+  labs(
+    title = "Gustoća normaliziranih podataka Renyijeve simulacije - 50",
+    x = "Vrijednosti",
+    y = "Gustoća"
+    )
+
+ggplot(renyiNorm1000, aes(x = renyiNorm1000)) + 
+  geom_density(fill = "orange", alpha = 0.5) +
+  stat_function(
+    fun = dnorm, 
+    args = list(mean = 0, sd = 1), 
+    color = "navy",
+    size = 1.2) +
+  labs(
+    title = "Gustoća normaliziranih podataka Renyijeve simulacije - 1000",
+    x = "Vrijednosti",
+    y = "Gustoća"
+    )
+
+  
+```
+
+Iz priloženih grafova možemo vidjeti kako je u slučaju veličina 10 i 50 distribucija ima skokove na mjestima gdje su bile određene diskretne vrijednosti, dok je kod veličine od 1000 distribucija gotovo normalna. 
+
+Sad ćemo opet prikazati i graf zauzeća ovisno o veličini parkinga i vidjeti koliko brzo će se vrijednosti prilagoditi očekivanima.
+
+```{r}
+set.seed(12)
+
+rdfinc <- data.frame(x = numeric(0), y = numeric(0))
+
+for(i in 10:200) {
+  rdfinc <- rbind(rdfinc, data.frame(x = i, y = mean(repRenyi(i, 1, 20)) / i))
+}
+
+ggplot(rdfinc, aes(x = x, y = y)) +
+  geom_line(color = "sienna", size = 1.7) +
+  stat_smooth(method = "loess", formula = y~x, alpha = 0.5) +
+  scale_x_continuous(name = "Veličina parkinga") +
+  scale_y_continuous(name = "Prosječno zauzeće parkinga") +
+  labs(title = "Renyi: Prosječno zauzeće parkinga ovisno o veličini") +
+  geom_hline(
+    yintercept = limitRenyi, color = "red", linetype = "dashed", size = 1.3
+    )
+```
+
+Po rezultatima ovog grafa, dobijamo slične zaključke kao što je to bio slučaj prilikom simulacija Floryjevog modela. Loess metoda ponovno se približava ciljanom limitu za veličine iznad 60, a daljnjim povećanjem dolazi sve bliže i bliže pravoj vrijednosti, dok se vrijednosti simulacija puno manje razlikuju i grupiraju oko Renyijevog limita.
+
+**Konvergencija Floryjevog u Renyijev model**
+
+Kao što je u radu dodatno objašnjeno, prilikom Floryjevog modela koji smo koristili, minimalna *rupa* u parkingu je upravo duljine jednog automobila, dok je u Renyijevom slučaju infinitezimalno malena. No, ako bi se veličina automobila povećala da zauzme više mjesta, veličina *rupe* u odnosu na automobil bi se smanjivala, tako da bi zapravo puštanjem veličine automobila u beskonačnost značila da bismo dobili kontinuirani model. To nam je iznimno važno za slučaj kada budemo radili u više dimenzija jer će olakšati same simulacije.\
+Važno je naglasiti da bismo mi u ovom slučaju htjeli što veći i parking i veličinu automobila, odnosno beskonačnu, ali za simulacije moramo odrediti dobre brojke kako sama veličina automobila u odnosu na parking ne bi bila prevelika.
+
+```{r}
+set.seed(12)
+
+approx1 <- flory(500000, 10)
+approx1
+approx2 <- flory(500000, 100)
+approx2
+```
+Ovdje vidimo da smo na duljini automobila 10 i 100 te veličini parkinga od 500 000 uspjeli postaviti 15424, odnosno 3732 automobila.
+
+```{r}
+approx1 * 10 / 500000
+approx2 * 100 / 500000
+```
+Kako je već spomenuto, što je veći automobil, to je manja mogućnost za velike *rupe* pa je i rezultat s automobilima duljine 100 bliži ciljanom.
+
+Nastavno na ova saznanja, reći ćemo da će nam u nastavku duljina biti jedan milijun, a testirat ćemo s nekoliko veličina automobila za razliku od prošlih slučajeva kada je duljina parkinga bila u interesu.
+
+
+```{r}
+set.seed(12)
+
+car10 <- repFlory(1000000, 10, 100)
+car100 <- repFlory(1000000, 100, 100)
+car1000 <- repFlory(1000000, 1000, 100)
+
+dfcar10 <- as.data.frame(car10)
+dfcar100 <- as.data.frame(car100)
+dfcar1000 <- as.data.frame(car1000)
+```
+
+```{r}
+ggplot(dfcar10, aes(x = car10)) +
+  geom_histogram(fill = "#008080", 
+           aes(y = after_stat(count) / sum(after_stat(count))),
+           binwidth = 10) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Aproksimacija Flory > Renyi - vel. automobila 10"
+    ) +
+  geom_vline(xintercept = limitRenyi * 100000, color = "red", size = 1.2)
+
+ggplot(dfcar100, aes(x = car100)) +
+  geom_histogram(fill = "#008080", 
+           aes(y = after_stat(count) / sum(after_stat(count))),
+           binwidth = 4) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Aproksimacija Flory > Renyi - vel. automobila 100"
+    ) +
+  geom_vline(xintercept = limitRenyi * 10000, color = "red", size = 1.2)
+
+ggplot(dfcar1000, aes(x = car1000)) +
+  geom_histogram(fill = "#008080", 
+           aes(y = after_stat(count) / sum(after_stat(count))),
+           binwidth = 3) +
+  scale_x_continuous(name = "Broj automobila") +
+  scale_y_continuous(name = "Relativna frekvencija") +
+  labs(
+    title = "Aproksimacija Flory > Renyi - vel. automobila 1000"
+    ) +
+  geom_vline(xintercept = limitRenyi * 1000, color = "red", size = 1.2)
+```
+
+Prema simulacijama i dobivenim histogramima, pogotovo veličine 10 i 1000, jasno je da su veće *rupe* itekako značajne za kvalitetu rezultata. Čak i kod veličine automobila 100, vidljivo je da je većina rezultata veća nego što bi bila idealna, no ipak za veličinu 1000 taj rezultat prilično dobro opisuje Renyijev model. 
+
+Slično kao i u prošlim primjerima, pokazat ćemo konvergenciju koju smo naslutili s obzirom na prošle simulacije.
+
+```{r}
+set.seed(12)
+
+floryRenyiInc <- data.frame(x= numeric(0),y=numeric(0))
+ 
+for(i in seq(10, 2010, by = 50)){
+  floryRenyiInc <- rbind(floryRenyiInc,
+                         data.frame(x = i,
+                                    y=mean(repFlory(1000000, i, 20))/(1000000 / i))
+                         
+                         )
+ }
+ 
+ggplot(floryRenyiInc, aes(x=x,y=y)) +
+ geom_line(color="#4b0082",size = 1.7) +
+ stat_smooth(method="loess",formula=y~x,alpha=0.5) +
+ scale_x_continuous(name="Veličina automobila") +
+ scale_y_continuous(name="Prosječno zauzeće parkinga") +
+ labs(title="Flory > Renyi : Zauzeće obzirom na duljinu automobila") +
+ geom_hline(
+ yintercept=limitRenyi,color="red",linetype="dashed",size=1.3
+ )
+```
+
+Očekivano, na temelju prošlih grafova, zaključujemo da Floryjev model prilično dobro opisuje kontinuirani Renyijev kada se poveća duljina samog automobila. Već za vrijednosti oko 100 pokazuje da je iznimno blizu, što smo na prošlih grafovima mogli vidjeti, a za još veće vrijednosti je sve precizniji. S ovim saznanjima puno lakše možemo pristupiti idućem poglavlju koje se bavi dvodimenzionalnim modelom.
+
+**Dvodimenzionalni model**
+
+Tijekom mnogih desetljeća prošlog stoljeća, bilo je mnoštvo pokušaja poopćenja modela u više dimenzija.
+Različiti radovi dolazili su do različitih rješenja, ali u principu svi su bili vrlo blizu.
+U prošlom odjeljku već smo vidjeli da je za preciznu aproksimaciju potrebnu i veličinu *parkinga* i *duljinu automobila* gurnuti prema beskonačnosti.
+Tek je u 90-ima velikom diskretizacijom pronađen iznimno precizan rezultat.\
+$\theta_{∞} = 0.562009 \hspace{1mm}\pm\hspace{1mm}0.000004$
+
+Brosilov, Ziff i Vigil otkrili su da kada veličina k$\times$k kvadrata koji predstavlja automobil ide u beskonačnost ide prema gore navedenoj brojci.
+
+No, isto tako otkrili su da podaci prilično dobro podilaze sljedećoj funkciji:
+$\theta_{k} = \theta_{∞} + \frac{0.315}{k} + \frac{0.114}{k^{2}}$
+gdje je k upravo broj kvadrata koji po duljini zauzima automobil (npr. za duljinu 1 to je 2).
+
+Bili su još neki pokušaji da se pokuša doći do precizne funkcije, no bazirali su se na *Palastijinoj pretpostavci*, a ona nije točna kada k ide prema beskonačnosti.  
+
+Prije nego usporedimo naše rezultate, potrebno je odabrati dobar n za preciznost. 
+
+```{r}
+set.seed(12)
+carSize <- 1 #zauzima 2x2 diskretna mjesta
+
+appropiateParkingSize <- data.frame(x= numeric(0),y=numeric(0))
+ 
+for(i in seq(10, 150, by = 20)){
+  vec <- initArray(i, carSize)
+  appropiateParkingSize <- rbind(appropiateParkingSize, 
+                                 data.frame(
+                                   x = i, 
+                                   y = simArr(i, vec, carSize)))                  
+ }
+ 
+ggplot(appropiateParkingSize, aes(x=x,y=y)) +
+ geom_line(color = "#fa0",linewidth = 1.7) +
+ stat_smooth(method = "loess",formula = y ~ x,alpha = 0.5) +
+ scale_x_continuous(name = "Veličina 2d parkinga") +
+ scale_y_continuous(name = "Zauzeće parkinga") +
+ labs(title = "Pronalazak optimalne veličine parkinga - zauzeće") +
+ geom_hline(
+ yintercept = jamming(2), color="red", linetype="dashed", linewidth=1.3
+ )
+
+
+```
+
+Ne treba zaboraviti za je ovdje simulacija provedena samo jednom, no i takva je već iznimno računalno zahtjevna. I dok se čini da je za omjer veličine parkinga preko 100 rezultat prilično dobar, pogotovo kod testiranja većih *veličina automobila* omjer će se morati smanjiti. Prvo ćemo pokušati s omjerom 50 pa na temelju tih rezultata zaključiti treba li nam nešto precizniji omjer.
+
+```{r}
+x_vals <- seq(2, 128, 0.5)
+y_vals <- jamming(x_vals)
+jamming_func <- data.frame(x = x_vals, y = y_vals)
+```
+
+```{r}
+set.seed(12)
+carSize <- c(1, 3, 7, 15, 31, 63, 127)
+
+sim2d <- data.frame(x= numeric(0),y=numeric(0))
+ 
+for(i in carSize){
+  vec <- initArray(i * 50, i)
+  sim2d <- rbind(sim2d,data.frame(
+    x = i, 
+    y = simArr(i * 50, vec, i)
+    ))                  
+ }
+```
+
+```{r}
+ggplot(sim2d, aes(x = x, y = y)) +
+  geom_line(color = "#aa0", linewidth = 1.5, aes(y = y)) +
+  scale_x_continuous(name = "Veličina automobila", 
+                     breaks = scales::pretty_breaks()
+                     ) +
+  scale_y_continuous(name = "Zauzeće parkinga",
+                     breaks = scales::pretty_breaks()
+                     ) +
+  labs(title = "Zauzeće parkinga - 2d simulacija (omjer 50)") +
+  geom_line(data = jamming_func,
+    aes(x = x_vals, y = y_vals), 
+    color = "red", linetype = "solid", linewidth = 0.8
+    )
+```
+Crvenom linijom prikazana je funkcija koju bi očekivano pratile naše simulacije, no ipak je prikazano izvjesno odstupanje koje je ipak preveliko o ovom slučaju.
+Zato ćemo ponoviti simulacije s omjerom 70
+
+```{r}
+set.seed(12)
+carSize <- c(1, 3, 7, 15, 31, 63, 127)
+
+sim2d70 <- data.frame(x= numeric(0),y=numeric(0))
+ 
+for(i in carSize){
+  vec <- initArray(i * 70, i)
+  sim2d70 <- rbind(sim2d70,data.frame(
+    x = i, 
+    y = simArr(i * 70, vec, i)
+    ))                  
+ }
+```
+
+
+```{r}
+ggplot(sim2d70, aes(x = x, y = y)) +
+  geom_line(color = "#aa0", linewidth = 1.5, aes(y = y)) +
+  scale_x_continuous(name = "Veličina automobila", 
+                     breaks = scales::pretty_breaks()
+                     ) +
+  scale_y_continuous(name = "Zauzeće parkinga",
+                     breaks = scales::pretty_breaks()
+                     ) +
+  labs(title = "Zauzeće parkinga - 2d simulacija (omjer 70)") +
+  geom_line(data = jamming_func,
+    aes(x = x_vals, y = y_vals), 
+    color = "red", linetype = "solid", linewidth = 0.8
+    )
+```
+```{r}
+abs(sim2d70$y - jamming(sim2d70$x))
+```
+
+
+Konačno, za omjer *parkinga i veličine automobila* od 70 rezultati su iznimno zadovoljavajući i pokazuju vrlo malena odstupanja od traženih. Daljnjim povećanjem i *veličine parkinga i veličine automobila* mogli bismo dobili rezultate koji su još bliži idealnima, ali riječ je o iznimno računalno zahtjevnim simulacijama koje bi uzele puno vremena, a sama kvaliteta rezultata ne bi ništa značajno promijenila.

@@ -1,0 +1,59 @@
+---
+title: "Renyi - simulacija i animacija"
+author: "Borna Odobašić, Istok Korkut, Lovro Matić"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+
+```{r}
+renyi_positions <- function(n, k, offset = 0) {
+  if (n < k) {
+    return(numeric(0))
+  }
+  
+  x <- runif(1, 0, n - k)
+  
+  # Lijevi rub automobila
+  pos <- offset + x
+  
+  left_positions <- renyi_positions(x, k, offset)
+  right_positions <- renyi_positions(n - k - x, k, offset + x + k)
+  
+  c(pos, left_positions, right_positions)
+}
+```
+
+```{r}
+set.seed(12)
+
+n <- 10
+k <- 1
+
+positions <- renyi_positions(n, k)
+positions <- sort(positions)
+
+dfCars <- data.frame(
+  car = seq_along(positions),
+  start = positions,
+  end = positions + k
+)
+
+ggplot() + 
+  geom_segment(aes(x = 0, xend = n, y = 1, yend = 1), size = 1.5) +
+  geom_rect(data = dfCars,
+            aes(xmin = start, xmax = end, ymin = 0.8, ymax = 1.2, fill = factor(car)), color = "blue") +
+  geom_text(data = dfCars, aes(x = (start + end) / 2, y = 1.4, label = car)) +
+    scale_fill_discrete(guide = "none") +
+    scale_x_continuous(limits = c(0, n)) + 
+    scale_y_continuous(limits = c(0, 2)) +
+  labs(x = "Pozicija", y = "", title = "Simulirani Renyijev model parkiranja")
+
+```
+
+
